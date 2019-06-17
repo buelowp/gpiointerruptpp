@@ -45,6 +45,8 @@
 
 #include "gpiometadata.h"
 
+#define GPIO_MAX_POLL   18
+
 /**
  * \class GpioPoll
  * Provides a singleton for handling GPIO IRQ events for specified pins
@@ -60,10 +62,7 @@ public:
 	bool checkDebounce(GpioMetaData*);
 	void start();
     void stop();
-    void run();
     
-    bool value(GpioMetaData*, int&);
-
 	static GpioPoll* instance()
 	{
 		static GpioPoll instance;
@@ -76,9 +75,7 @@ private:
 	GpioPoll& operator=(GpioPoll const&) {};
 	GpioPoll(GpioPoll&);
 
-    bool exportPin(int);
-    bool unexportPin(int);
-    bool gpioEdge(int, GPIO_Irq_Type);
+    void run();
 
 	std::map<int, GpioMetaData*> m_metadata;
     std::map<int, int> m_activeDescriptors;

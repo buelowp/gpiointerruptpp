@@ -72,14 +72,14 @@ public:
     GPIO_Pin_Direction direction() { return m_direction; }
     void setDirection(GPIO_Pin_Direction d) { m_direction = d; }
     
-    GPIO_Irq_Type type() { return m_type; }
-    void setType(GPIO_Irq_Type t) { m_type = t; }
+    GPIO_Irq_Type interruptType();
+    bool setInterruptType(GPIO_Irq_Type);
     
     unsigned long debounce() { return m_debounce; }
     void setDebounce(unsigned long d) { m_debounce = d; }
     
-    std::function<void(int)> callback() { return m_callback; }
-    void setCallback(std::function<void(int)> c) { m_callback = c; }
+    std::function<void(GpioMetaData*)> callback() { return m_callback; }
+    void setCallback(std::function<void(GpioMetaData*)> c) { m_callback = c; }
     
     useconds_t time() { return m_time; }
     void setTime(useconds_t t) { m_time = t; }
@@ -87,15 +87,21 @@ public:
     bool isOpen();
     int fd() { return m_fd; }
     
+    bool value(int&);
+    
+    bool exportGpio();
+    bool unexportGpio();
+    
 private:
     int m_pin;
     unsigned long m_debounce;
     GPIO_Pin_Direction m_direction;
     GPIO_Irq_Type m_type;
-    std::function<void(int)> m_callback;
+    std::function<void(GpioMetaData*)> m_callback;
     useconds_t m_time;
     int m_fd;
     bool m_isOpen;
+    bool m_enabled;
 };
 
 #endif // GPIOMETADATA_H
