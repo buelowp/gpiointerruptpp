@@ -31,12 +31,14 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
     
     if (!exportGpio(pin)) {
         syslog(LOG_ERR, "Unable to export pin %d", pin);
+        free(md);
         return false;
     }
     
-    if (!setInterruptType(pin, irqtype)) {
+    if (!setPinInterruptType(pin, irqtype)) {
         syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
         unexportGpio(pin);
+        free(md);
         return false;
     }
     
@@ -92,7 +94,7 @@ void GpioInterrupt::setPinCallback(int pin, std::function<void(MetaData*)> cbk)
     md->m_callback = cbk;
 }
 
-void GpioInterrupt::setValue(int pin, bool toggle)
+void GpioInterrupt::setValue(int pin, bool value)
 {
     MetaData *md = nullptr;
     
@@ -105,7 +107,7 @@ void GpioInterrupt::setValue(int pin, bool toggle)
     
     if (md) {
         if (md->m_isOpen) {
-            if (toggle)
+            if (value)
                 write(md->m_fd, "1", 1);
             else
                 write(md->m_fd, "0", 1);
@@ -145,7 +147,7 @@ bool GpioInterrupt::unexportGpio(int pin)
     int fd;
     char buf[128];
     
-    setInterruptType(pin, GPIO_IRQ_NONE);
+    setPinInterruptType(pin, GPIO_IRQ_NONE);
     if ((fd = open("/sys/class/gpio/unexport", O_WRONLY)) > 0) {
 		sprintf(buf, "%d", pin);
 		syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/unexport", __FUNCTION__, __LINE__, buf);
@@ -159,7 +161,7 @@ bool GpioInterrupt::unexportGpio(int pin)
     return true;
 }
 
-bool GpioInterrupt::setInterruptType(int pin, int type)
+bool GpioInterrupt::setPinInterruptType(int pin, int type)
 {
     int fd;
     char buf[128];

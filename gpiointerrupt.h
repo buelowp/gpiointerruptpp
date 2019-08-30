@@ -75,14 +75,10 @@ public:
 
     bool addPin(int pin, int irqtype = GPIO_IRQ_RISING, int pindirection = GPIO_DIRECTION_IN, int pinstate = GPIO_PIN_HIGH, unsigned long debounce = 100);
     int removePin(int pin);
-    bool pinActive(int pin);
     void setPinCallback(int pin, std::function<void(MetaData*)> cbk);
-    bool setInterruptType(int pin, int type = GPIO_IRQ_RISING);
-    bool exportGpio(int pin);
-    bool unexportGpio(int pin);
+    bool setPinInterruptType(int pin, int type = GPIO_IRQ_RISING);
     bool value(int pin, int &value);
-    void setValue(int pin, bool toggle);
-    bool checkDebounce(MetaData*);
+    void setValue(int pin, bool value);
     
     void start(int pin);
     void stop(int pin);
@@ -104,6 +100,9 @@ private:
     void run();
     bool set(MetaData *pin);
     bool openPin(MetaData *pin);
+    bool exportGpio(int pin);
+    bool unexportGpio(int pin);
+    bool checkDebounce(MetaData*);
 
 	std::map<int, MetaData*> m_metadata;
     std::map<int, int> m_activeDescriptors;
