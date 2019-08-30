@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.5.0)
-project (gpio++)
+project (oniongpiopp)
 
 FILE (GLOB SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 FILE (GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
@@ -13,6 +13,7 @@ SET (THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 add_library (${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
+target_link_libraries (${PROJECT_NAME} Threads::Threads)
 
 set_target_properties (${PROJECT_NAME} PROPERTIES VERSION 1.0 SOVERSION 1)
 
