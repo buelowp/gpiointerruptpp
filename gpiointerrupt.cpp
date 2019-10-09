@@ -205,21 +205,33 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
 
 void GpioInterrupt::run()
 {
-    struct pollfd fds[GPIO_MAX_POLL];
+    struct epoll_event ev, events[GPIO_MAX_POLL];
+    int epollfd;
     int index = 0;
-    int pollrc = 0;
+    int nfds;
+    
+    if ((epollfd = epoll_create1(0)) < 0) {
+        syslog(LOG_ERR, "Unable to create epoll instance: %s(%d)", strerror(errno), errno);
+        return;
+    }
     
     syslog(LOG_DEBUG, "%s:%d: Adding %d entries to the poll function", __FUNCTION__, __LINE__, m_metadata.size());
     for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
-        fds[index].fd = it->second->m_fd;
-		fds[index].events = POLLPRI;
-        m_activeDescriptors.insert(std::pair<int, int>(it->second->m_pin, fds[index].fd));
-        syslog(LOG_DEBUG, "%s:%d: Added pollfd entry %d, fd %d", __FUNCTION__, __LINE__, index, fds[index].fd);
-        index++;
+        ev.data.fd = it->second->m_fd;
+        ev.events = EPOLLIN;
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, it->second->m_fd, &ev) == -1) {
+            syslog(LOG_ERR, "epoll_ctl: %s(%d)", strerror(errno), errno);
+            continue;
+        }
+        else {
+            m_activeDescriptors.insert(std::pair<int, int>(it->second->m_pin, it->second->m_fd));
+            syslog(LOG_DEBUG, "%s:%d: Added pollfd entry %d, fd %d", __FUNCTION__, __LINE__, index, it->second->m_fd);
+            index++;
+        }
     }
 
     while (m_enabled) {
-        if ((pollrc = poll(fds, index, -1)) < 0) {
+        if ((nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, -1)) < 0) {
             if (errno == EINTR) {
                 syslog(LOG_DEBUG, "%s:%d: EINTR\n", __FUNCTION__, __LINE__);
                 continue;
@@ -230,38 +242,24 @@ void GpioInterrupt::run()
                 return;
             }
         }
-        else if (pollrc > 0) {
-            for (int i = 0; i < pollrc; i++) {
-                if ((fds[i].revents & POLLHUP) || (fds[i].revents & POLLNVAL)) {
-                    if (fds[i].revents & POLLHUP)
-                        syslog(LOG_DEBUG, "%s:%d: Got a HUP on fd %d", __FUNCTION__, __LINE__, fds[i].fd);
-                    if (fds[i].revents & POLLNVAL)
-                        syslog(LOG_DEBUG, "%s:%d: Got a NVAL on fd %d", __FUNCTION__, __LINE__, fds[i].fd);
-                }
-                if (fds[i].revents & POLLPRI) {
-                    int fd = fds[i].fd;
-                    auto it = std::find_if(m_activeDescriptors.begin(), m_activeDescriptors.end(), [fd](const auto& mad) {return mad.second == fd; });
-                    if (it != m_activeDescriptors.end()) {
-                        auto mdit = m_metadata.find(it->first);
-                        std::function<void(MetaData*)> func = mdit->second->m_callback;
-                        try {
-                            if (checkDebounce(&(*mdit->second))) {
-                                syslog(LOG_DEBUG, "%s:%d: Executing callback for pin %d", __FUNCTION__, __LINE__, mdit->second->m_pin);
-                                func(&(*mdit->second));
-                            }
-                        }
-                        catch (const std::bad_function_call& e) {
-                            syslog(LOG_ERR, "Unable to execute callback for pin %d", mdit->second->m_pin);
-                            syslog(LOG_ERR, "exception: %s", e.what());
+        else if (nfds > 0) {
+            for (int i = 0; i < nfds; ++i) {
+                int fd = events[i].data.fd;
+                auto it = std::find_if(m_activeDescriptors.begin(), m_activeDescriptors.end(), [fd](const auto& mad) {return mad.second == fd; });
+                if (it != m_activeDescriptors.end()) {
+                    auto mdit = m_metadata.find(it->first);
+                    std::function<void(MetaData*)> func = mdit->second->m_callback;
+                    try {
+                        if (checkDebounce(&(*mdit->second))) {
+                            syslog(LOG_DEBUG, "%s:%d: Executing callback for pin %d", __FUNCTION__, __LINE__, mdit->second->m_pin);
+                            func(&(*mdit->second));
                         }
                     }
+                    catch (const std::bad_function_call& e) {
+                        syslog(LOG_ERR, "Unable to execute callback for pin %d", mdit->second->m_pin);
+                        syslog(LOG_ERR, "exception: %s", e.what());
+                    }
                 }
-                /*
-                if (fds[i].revents & POLLERR) {
-                    syslog(LOG_DEBUG, "Error reported for pin\n");
-//                    exit(0);
-                }
-                */
             }
         }
         else {
