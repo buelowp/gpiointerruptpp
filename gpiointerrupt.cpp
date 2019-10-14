@@ -343,14 +343,16 @@ bool GpioInterrupt::set(MetaData *pin)
 	return true;
 }
 
-void GpioInterrupt::start(int)
+void GpioInterrupt::start()
 {
-    m_thread = new std::thread(&GpioInterrupt::run, this);
-    m_enabled = true;
-    syslog(LOG_DEBUG, "%s:%d: Enabling IRQ Handler", __FUNCTION__, __LINE__);
+    if (!m_enabled) {
+        m_thread = new std::thread(&GpioInterrupt::run, this);
+        m_enabled = true;
+        syslog(LOG_DEBUG, "%s:%d: Enabling IRQ Handler", __FUNCTION__, __LINE__);
+    }
 }
 
-void GpioInterrupt::stop(int)
+void GpioInterrupt::stop()
 {
     m_enabled = false;
     syslog(LOG_DEBUG, "%s:%d: Disabling IRQ Handler", __FUNCTION__, __LINE__);

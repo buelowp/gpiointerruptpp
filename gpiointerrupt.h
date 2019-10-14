@@ -80,8 +80,8 @@ public:
     bool value(int pin, int &value);
     void setValue(int pin, bool value);
     
-    void start(int pin);
-    void stop(int pin);
+    void start();
+    void stop();
     
    	MetaData* getPinMetaData(int);
 
