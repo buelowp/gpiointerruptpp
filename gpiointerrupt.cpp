@@ -29,12 +29,15 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
     md->m_state = pinstate;
     md->m_debounce = debounce;
     
+    std::cout << "Created metadata for pin " << pin << std::endl;
     if (!exportGpio(pin)) {
         syslog(LOG_ERR, "Unable to export pin %d", pin);
         free(md);
         return false;
     }
     
+    std::cout << "Pin export worked" << std::endl;
+    md->m_enabled = true;
     if (!setPinInterruptType(pin, irqtype)) {
         syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
         unexportGpio(pin);
@@ -42,8 +45,8 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
         return false;
     }
     
-    set(md);
-    md->m_enabled = true;
+    std::cout << "Adding pin " << pin << " to map" << std::endl;
+    return set(md);
 }
 
 bool GpioInterrupt::value(int pin, int &value)
@@ -131,22 +134,24 @@ bool GpioInterrupt::exportGpio(int pin)
     
     memset(buf, '\0', 128);
     if ((fd = open("/sys/class/gpio/export", O_WRONLY)) > 0) {
-		sprintf(buf, "%d", pin);
-		syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
-		if (write(fd, buf, strlen(buf) + 1) < 0) {
+	sprintf(buf, "%d", pin);
+	syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
+	if (write(fd, buf, strlen(buf) + 1) < 0) {
             if (errno == 16) {
                 syslog(LOG_NOTICE, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
+    		std::cout << "Pin already exported, assuming control " << pin << std::endl;
             }
             else {
                 syslog(LOG_ERR, "write (%s): %s(%d)", buf, strerror(errno), errno);
                 close(fd);
                 return false;
             }
-		}
+	}
     }
     else {
         syslog(LOG_ERR, "open: /sys/class/gpio/export: %s(%d)", strerror(errno), errno);
     }
+    std::cout << "Success exporting GPIO " << pin << std::endl;
     close(fd);
     return true;
 }
@@ -178,6 +183,7 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
     
     memset(path, '\0', 256);
     sprintf(path, "/sys/class/gpio/gpio%d/edge", pin);
+	std::cout << "Trying to set interrupt for path " << path << std::endl;
     if ((fd = open(path, O_WRONLY)) > 0) {
         switch (type) {
             case GPIO_IRQ_RISING:
@@ -194,9 +200,10 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
                 break;
             default:
                 sprintf(buf, "broke");
-                break;
+		std::cout << "Wrong IRQ type given: " << type << std::endl;
+		return false;
         }
-		if (write(fd, buf, strlen(buf) + 1) < 0) {
+		if (write(fd, buf, strlen(buf)) < 0) {
 			syslog(LOG_ERR, "Error writing %s to %s: %d", buf, path, errno);
 			close(fd);
 			return false;
@@ -207,9 +214,11 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
     }
     else {
         syslog(LOG_ERR, "open: %s: %s(%d)", path, strerror(errno), errno);
+	std::cout << "Unable to open " << path << std::endl;
         return false;
     }
-    return false;
+    std::cout << "Pin interrupt for pin " << pin << " set to " << type << std::endl;
+    return true;
 }
 
 void GpioInterrupt::run()
@@ -225,6 +234,7 @@ void GpioInterrupt::run()
     }
     
     syslog(LOG_DEBUG, "%s:%d: Adding %d entries to the poll function", __FUNCTION__, __LINE__, m_metadata.size());
+	std::cout << "Adding " << m_metadata.size() << " entries to epoll" << std::endl;
     for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
         ev.data.fd = it->second->m_fd;
         ev.events = EPOLLIN;
@@ -235,6 +245,7 @@ void GpioInterrupt::run()
         else {
             m_activeDescriptors.insert(std::pair<int, int>(it->second->m_pin, it->second->m_fd));
             syslog(LOG_DEBUG, "%s:%d: Added pollfd entry %d, fd %d", __FUNCTION__, __LINE__, index, it->second->m_fd);
+	std::cout << "Added pollfd entry " << index << " fd " << it->second->m_fd << std::endl;
             index++;
         }
     }
@@ -242,7 +253,6 @@ void GpioInterrupt::run()
     while (m_enabled) {
         if ((nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, -1)) < 0) {
             if (errno == EINTR) {
-                syslog(LOG_DEBUG, "%s:%d: EINTR\n", __FUNCTION__, __LINE__);
                 continue;
             }
             else {
@@ -257,16 +267,21 @@ void GpioInterrupt::run()
                 auto it = std::find_if(m_activeDescriptors.begin(), m_activeDescriptors.end(), [fd](const auto& mad) {return mad.second == fd; });
                 if (it != m_activeDescriptors.end()) {
                     auto mdit = m_metadata.find(it->first);
+			if (!mdit->second->m_enabled)
+				std::cerr << "Pin " << mdit->second->m_pin << " is not enabled" << std::endl;
+
                     std::function<void(MetaData*)> func = mdit->second->m_callback;
                     try {
                         if (checkDebounce(&(*mdit->second))) {
                             syslog(LOG_DEBUG, "%s:%d: Executing callback for pin %d", __FUNCTION__, __LINE__, mdit->second->m_pin);
+				std::cout << "executing callback for pin " << mdit->second->m_pin << std::endl;
                             func(&(*mdit->second));
                         }
                     }
                     catch (const std::bad_function_call& e) {
                         syslog(LOG_ERR, "Unable to execute callback for pin %d", mdit->second->m_pin);
                         syslog(LOG_ERR, "exception: %s", e.what());
+			std::cerr << "Function exception for pin " << mdit->second->m_pin << std::endl;
                     }
                 }
             }
@@ -332,23 +347,27 @@ bool GpioInterrupt::set(MetaData *pin)
 {
 	std::lock_guard<std::mutex> guard(m_mutex);
 
+	std::cout << "Attempting to add pin " << pin->m_pin << std::endl;
 	if (pin->m_direction != GPIO_DIRECTION_IN) {
 		syslog(LOG_DEBUG, "%s:%d: Pin is set as output, cannot continue", __FUNCTION__, __LINE__);
+	std::cerr << "Pin is an output" << std::endl;
 		return false;
 	}
 
 	if (m_metadata.find(pin->m_pin) != m_metadata.end()) {
 		syslog(LOG_ERR, "Pin %d is already active, cancel first", pin->m_pin);
+	std::cerr << "Pin is already active" << std::endl;
 		return false;
 	}
 
     if (!openPin(pin)) {
+	std::cerr << "Unable top open gpio value file" << std::endl;
         syslog(LOG_ERR, "Unable to open gpio value file: %s(%d)", strerror(errno), errno);
         return false;
     }
 
     m_metadata[pin->m_pin] = pin;
-    std::cout << "Pin " pin->m_pin << " has been added to metadata map" << std::endl;
+    std::cout << "Pin " << pin->m_pin << " has been added to metadata map" << std::endl;
 	return true;
 }
 
@@ -356,6 +375,7 @@ void GpioInterrupt::start()
 {
     if (!m_enabled) {
         m_thread = new std::thread(&GpioInterrupt::run, this);
+	m_thread->detach();
         m_enabled = true;
         syslog(LOG_DEBUG, "%s:%d: Enabling IRQ Handler", __FUNCTION__, __LINE__);
     }
@@ -372,6 +392,7 @@ bool GpioInterrupt::openPin(MetaData *pin)
     MetaData *md = nullptr;
     
     if (!pin->m_enabled) {
+	std::cerr << "GPIO has not been successfully exported" << std::endl;
         syslog(LOG_ERR, "GPIO has not been sucessfully exported");
         return false;
     }
@@ -380,14 +401,21 @@ bool GpioInterrupt::openPin(MetaData *pin)
         std::string path = "/sys/class/gpio/gpio" + std::to_string(pin->m_pin) + "/value";
         
         if ((pin->m_fd = open(path.c_str(), O_RDWR|O_NONBLOCK)) < 0) {
+		std::cerr << "open: " << strerror(errno) << "(" << errno << ")" << std::endl;
             syslog(LOG_ERR, "open: %s: %s(%d)\n", path.c_str(), strerror(errno), errno);
             pin->m_isOpen = false;
         }
         else {
             pin->m_isOpen = true;
+		std::cout << "Pin is opened with fd " << pin->m_fd << std::endl;
             syslog(LOG_NOTICE, "%s:%d: Opened %s with fd %d", __FUNCTION__, __LINE__, path.c_str(), pin->m_fd);
         }
     }
+	else {
+		std::cout << "Didn't pass m_isOpen test: " << pin->m_isOpen << ", " << pin->m_fd << std::endl;
+	}
+    
+    lseek(md->m_fd, 0, SEEK_SET);
     return pin->m_isOpen;
 }
 
