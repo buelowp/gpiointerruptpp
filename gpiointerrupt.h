@@ -75,7 +75,7 @@ public:
 
     bool addPin(int pin, int irqtype = GPIO_IRQ_RISING, int pindirection = GPIO_DIRECTION_IN, int pinstate = GPIO_PIN_HIGH, unsigned long debounce = 100);
     int removePin(int pin);
-    void setPinCallback(int pin, std::function<void(MetaData*)> cbk);
+    bool setPinCallback(int pin, std::function<void(MetaData*)> cbk);
     bool setPinInterruptType(int pin, int type = GPIO_IRQ_RISING);
     bool value(int pin, int &value);
     void setValue(int pin, bool value);

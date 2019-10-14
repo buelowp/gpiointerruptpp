@@ -80,7 +80,7 @@ bool GpioInterrupt::value(int pin, int &value)
     return false;
 }
 
-void GpioInterrupt::setPinCallback(int pin, std::function<void(MetaData*)> cbk)
+bool GpioInterrupt::setPinCallback(int pin, std::function<void(MetaData*)> cbk)
 {
     MetaData *md = nullptr;
     
@@ -89,9 +89,18 @@ void GpioInterrupt::setPinCallback(int pin, std::function<void(MetaData*)> cbk)
     }
     catch (std::out_of_range &e) {
         syslog(LOG_ERR, "Exception (%s) trying to insert callback for pin %d", e.what(), pin);
+        std::cerr << "Exception trying to find metadata for pin " << pin << ": " << e.what() << std::endl;
+        return false;
     }
     
-    md->m_callback = cbk;
+    if (md)
+        md->m_callback = cbk;
+    else {
+        syslog(LOG_ERR, "Pin metadata for pin %d is NULL", pin);
+        std::cerr << "Pin metadata for pin " << pin << " is NULL" << std::endl;
+        return false;
+    }
+    return true;
 }
 
 void GpioInterrupt::setValue(int pin, bool value)
