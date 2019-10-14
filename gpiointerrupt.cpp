@@ -348,7 +348,7 @@ bool GpioInterrupt::set(MetaData *pin)
     }
 
     m_metadata[pin->m_pin] = pin;
-    
+    std::cout << "Pin " pin->m_pin << " has been added to metadata map" << std::endl;
 	return true;
 }
 
