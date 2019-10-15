@@ -415,7 +415,6 @@ bool GpioInterrupt::openPin(MetaData *pin)
 		std::cout << "Didn't pass m_isOpen test: " << pin->m_isOpen << ", " << pin->m_fd << std::endl;
 	}
     
-    lseek(md->m_fd, 0, SEEK_SET);
     return pin->m_isOpen;
 }
 
