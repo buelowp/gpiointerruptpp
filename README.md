@@ -13,6 +13,38 @@ Create a new pin
 GpioInterrupt::instance()->addPin(pin);
 ```
 
+The addPin() method sets defaults for the following values
+
+* Interrupt type, RISING, FALLING, BOTH, or NONE, default is RISING
+* Direction, either IN or OUT, default is IN
+* Pin state, either HIGH or LOW, default is HIGH
+* Debounce time, default is 100ms
+
+These are C++ method defaults, so you must set them all explicitly if you want to set the debounce. However, you can always set each of these individually after the pin has been added. 
+
+```
+GpioInterrupt::instance()->addPin(pin, GpioInterrupt::GPIO_IRQ_FALLING, GpioInterrupt::GPIO_DIRECTION_OUT, GpioInterrupt::GPIO_PIN_LOW, 500);
+```
+
+The possible values to pass are as follows
+
+Interrupts
+
+* GPIO_IRQ_RISING
+* GPIO_IRQ_FALLING
+* GPIO_IRQ_BOTH
+* GPIO_IRQ_NONE
+
+Pin Direction
+
+* GPIO_DIRECTION_IN
+* GPIO_DIRECTION_OUT
+
+Pin State
+
+* GPIO_PIN_LOW
+* GPIO_PIN_HIGH
+
 Read the value of a pin
 ```
 int value;
