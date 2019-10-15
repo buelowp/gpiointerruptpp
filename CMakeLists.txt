@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.5.0)
-project (oniongpiopp)
+project (gpiointerruptpp)
 
 FILE (GLOB SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 FILE (GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
