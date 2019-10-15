@@ -260,9 +260,6 @@ void GpioInterrupt::run()
                 auto it = std::find_if(m_activeDescriptors.begin(), m_activeDescriptors.end(), [fd](const auto& mad) {return mad.second == fd; });
                 if (it != m_activeDescriptors.end()) {
                     auto mdit = m_metadata.find(it->first);
-			if (!mdit->second->m_enabled)
-				std::cerr << "Pin " << mdit->second->m_pin << " is not enabled" << std::endl;
-
                     std::function<void(MetaData*)> func = mdit->second->m_callback;
                     try {
                         if (checkDebounce(&(*mdit->second))) {
@@ -276,16 +273,6 @@ void GpioInterrupt::run()
                     }
                 }
             }
-        }
-        else {
-            int v;
-            
-            for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
-                if (value(it->second->m_pin, v)) {
-                    syslog(LOG_DEBUG, "%s:%d: Got pin value %d for gpio %d on timeout \n", __FUNCTION__, __LINE__, v, it->second->m_pin);
-                }
-            }
-            continue;   // Poll returned timeout to check if still enabled
         }
     }
 }
