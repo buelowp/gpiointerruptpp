@@ -239,17 +239,22 @@ void GpioInterrupt::run()
     }
 
     while (m_enabled) {
-        if ((nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, -1)) < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            else {
-                syslog(LOG_ERR, "poll: %s(%d)\n", strerror(errno), errno);
-                m_enabled = false;
+        nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, 100);
+        if (nfds == 0) {
+            if (!m_enabled) {
+                syslog(LOG_ERR, "GPIO Interrupt thread ending by command");
                 return;
             }
         }
-        else if (nfds > 0) {
+        else if (nfds < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            syslog(LOG_ERR, "poll: %s(%d)\n", strerror(errno), errno);
+            m_enabled = false;
+            return;
+        }
+        else {
             for (int i = 0; i < nfds; ++i) {
                 int fd = events[i].data.fd;
                 auto it = std::find_if(m_activeDescriptors.begin(), m_activeDescriptors.end(), [fd](const auto& mad) {return mad.second == fd; });
