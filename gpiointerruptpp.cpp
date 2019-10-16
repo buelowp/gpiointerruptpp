@@ -55,21 +55,35 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
         return false;
     }
     
-    if (!setPinDirection(pin, pindirection) {
+    if (!setPinDirection(pin, pindirection)) {
         syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
         unexportGpio(pin);
         free(md);
         return false;
     }
     
-    if (!setPinState(pin, pinstate) {
-        syslog(LOG_ERR, "Unable to set pin state for pin %d to %d", pin, state);
+    if (!setPinState(pin, pinstate)) {
+        syslog(LOG_ERR, "Unable to set pin state for pin %d to %d", pin, pinstate);
         unexportGpio(pin);
         free(md);
         return false;
     }
         
     return set(md);
+}
+
+bool GpioInterrupt::setPinDebounce(int pin, int debounce)
+{
+    MetaData *md = nullptr;
+
+    try {
+        md = m_metadata.at(pin);
+    }
+    catch (std::out_of_range &e) {
+        syslog(LOG_ERR, "Exception (%s) trying to insert callback for pin %d", e.what(), pin);
+    }
+
+    md->m_debounce = debounce;
 }
 
 bool GpioInterrupt::value(int pin, int &value)
@@ -161,9 +175,9 @@ bool GpioInterrupt::setPinState(int pin, int state)
         return false;
     }
     else {
-        if (dir == GPIO_PIN_ACTIVE_LOW)
+        if (state == GPIO_PIN_ACTIVE_LOW)
             write(fd, "0", 1);
-        if (dir == GPIO_PIN_ACTIVE_HIGH)
+        if (state == GPIO_PIN_ACTIVE_HIGH)
             write(fd, "1", 1);
         
         return true;

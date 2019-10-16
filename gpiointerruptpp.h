@@ -78,7 +78,8 @@ public:
     bool setPinCallback(int pin, std::function<void(MetaData*)> cbk);
     bool setPinInterruptType(int pin, int type = GPIO_IRQ_RISING);
     bool setPinDirection(int pin, int dir = GPIO_DIRECTION_IN);
-    bool setPinState(int pin, int state = GPIO_PIN_HIGH);
+    bool setPinState(int pin, int state = GPIO_PIN_ACTIVE_HIGH);
+    bool setPinDebounce(int pin, int debounce = 100);
     bool value(int pin, int &value);
     void setValue(int pin, int value);
     
@@ -94,16 +95,16 @@ public:
 	}
 
 private:
-	GpioInterrupt() { m_enabled = false; }
-	~GpioInterrupt()
+    GpioInterrupt() { m_enabled = false; }
+    ~GpioInterrupt()
     {
         for (std::pair<int, MetaData*> element : m_metadata) {
-            unexportGpio(element->first);
+            unexportGpio(element.first);
         }
     }
 
-	GpioInterrupt& operator=(GpioInterrupt const&) {};
-	GpioInterrupt(GpioInterrupt&);
+    GpioInterrupt& operator=(GpioInterrupt const&) {};
+    GpioInterrupt(GpioInterrupt&);
 
     void run();
     bool set(MetaData *pin);
@@ -112,11 +113,11 @@ private:
     bool unexportGpio(int pin);
     bool checkDebounce(MetaData*);
 
-	std::map<int, MetaData*> m_metadata;
+    std::map<int, MetaData*> m_metadata;
     std::map<int, int> m_activeDescriptors;
-	std::mutex m_mutex;
-	std::thread *m_thread;
-	bool m_enabled;
+    std::mutex m_mutex;
+    std::thread *m_thread;
+    bool m_enabled;
 };
 #endif
 
