@@ -19,6 +19,18 @@
 
 #include "gpiointerruptpp.h"
 
+/**
+ * \func bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate, unsigned long debounce)
+ * \param pin The GPIO to work on. This is the actual GPIO number in the CPU, not a reference to something else
+ * \param irqtype The IRQ  edge to use for polling, Rising, Falling, NONE or Both
+ * \param pinstate If this is 0, we are active_low like normal, and if not, then we are active high or inverted
+ * \param debounce This will be checked to see if we have passed the threshold to allow a second interrupt through, should generally only be used for buttons or switches
+ * 
+ * This function is the generic adder to get the class started. Call it with the defaults, and you get what
+ * most people use for most GPIO activities. In many cases, if you are simply access GPIO, then you don't even
+ * need the irqtype, state, and debounce, though pindirection is pretty important if you want to read an out pin
+ * on accident.
+ */
 bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate, unsigned long debounce)
 {
     MetaData *md = new MetaData();
@@ -43,6 +55,20 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
         return false;
     }
     
+    if (!setPinDirection(pin, pindirection) {
+        syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
+        unexportGpio(pin);
+        free(md);
+        return false;
+    }
+    
+    if (!setPinState(pin, pinstate) {
+        syslog(LOG_ERR, "Unable to set pin state for pin %d to %d", pin, state);
+        unexportGpio(pin);
+        free(md);
+        return false;
+    }
+        
     return set(md);
 }
 
@@ -59,6 +85,9 @@ bool GpioInterrupt::value(int pin, int &value)
     }
 
     if (md) {
+        if (md->m_direction == GPIO_DIRECTION_OUT)
+            syslog(LOG_ERR, "Trying to read the value of an output GPIO on pin %d, this may be weird", md->m_pin);
+        
         memset(buf, '\0', 4);
         if (md->m_isOpen) {
             if (read(md->m_fd, buf, 3) < 0) {
@@ -101,7 +130,49 @@ bool GpioInterrupt::setPinCallback(int pin, std::function<void(MetaData*)> cbk)
     return true;
 }
 
-void GpioInterrupt::setValue(int pin, bool value)
+bool GpioInterrupt::setPinDirection(int pin, int dir)
+{
+    std::string path = "/sys/class/gpio/gpio" + std::to_string(pin) + "/direction";
+    int fd;
+    
+    if ((fd = open(path.c_str(), O_RDWR)) < 0) {
+        syslog(LOG_ERR, "open: %s: %s(%d)", path.c_str(), strerror(errno), errno);
+        return false;
+    }
+    else {
+        if (dir == GPIO_DIRECTION_IN)
+            write(fd, "in", 2);
+        if (dir == GPIO_DIRECTION_OUT)
+            write(fd, "out", 3);
+        
+        return true;
+    }
+    
+    return false;
+}
+
+bool GpioInterrupt::setPinState(int pin, int state)
+{
+    std::string path = "/sys/class/gpio/gpio" + std::to_string(pin) + "/active_low";
+    int fd;
+    
+    if ((fd = open(path.c_str(), O_RDWR)) < 0) {
+        syslog(LOG_ERR, "open: %s: %s(%d)", path.c_str(), strerror(errno), errno);
+        return false;
+    }
+    else {
+        if (dir == GPIO_PIN_ACTIVE_LOW)
+            write(fd, "0", 1);
+        if (dir == GPIO_PIN_ACTIVE_HIGH)
+            write(fd, "1", 1);
+        
+        return true;
+    }
+    
+    return false;
+}
+
+void GpioInterrupt::setValue(int pin, int value)
 {
     MetaData *md = nullptr;
     
@@ -113,11 +184,14 @@ void GpioInterrupt::setValue(int pin, bool value)
     }
     
     if (md) {
-        if (md->m_isOpen) {
+        if (md->m_isOpen && md->m_direction == GPIO_DIRECTION_OUT) {
             if (value)
                 write(md->m_fd, "1", 1);
             else
                 write(md->m_fd, "0", 1);
+        }
+        else {
+            syslog(LOG_ERR, "Either pin %d is not open, or it's set to be an input, just fyi", md->m_pin);
         }
     }
 }

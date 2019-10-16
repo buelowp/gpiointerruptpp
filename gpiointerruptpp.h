@@ -57,8 +57,8 @@ public:
     static const int GPIO_IRQ_BOTH = 3;
     static const int GPIO_DIRECTION_IN = 0;
     static const int GPIO_DIRECTION_OUT = 1;
-    static const int GPIO_PIN_LOW = 0;
-    static const int GPIO_PIN_HIGH = 1;
+    static const int GPIO_PIN_ACTIVE_LOW = 0;
+    static const int GPIO_PIN_ACTIVE_HIGH = 1;
     
     typedef struct METADATA {
         int m_pin;
@@ -73,12 +73,14 @@ public:
         std::function<void(struct METADATA*)> m_callback;
     } MetaData;
 
-    bool addPin(int pin, int irqtype = GPIO_IRQ_RISING, int pindirection = GPIO_DIRECTION_IN, int pinstate = GPIO_PIN_HIGH, unsigned long debounce = 100);
+    bool addPin(int pin, int irqtype = GPIO_IRQ_RISING, int pindirection = GPIO_DIRECTION_IN, int pinstate = GPIO_PIN_ACTIVE_HIGH, unsigned long debounce = 100);
     int removePin(int pin);
     bool setPinCallback(int pin, std::function<void(MetaData*)> cbk);
     bool setPinInterruptType(int pin, int type = GPIO_IRQ_RISING);
+    bool setPinDirection(int pin, int dir = GPIO_DIRECTION_IN);
+    bool setPinState(int pin, int state = GPIO_PIN_HIGH);
     bool value(int pin, int &value);
-    void setValue(int pin, bool value);
+    void setValue(int pin, int value);
     
     void start();
     void stop();
@@ -93,7 +95,13 @@ public:
 
 private:
 	GpioInterrupt() { m_enabled = false; }
-	~GpioInterrupt() {};
+	~GpioInterrupt()
+    {
+        for (std::pair<int, MetaData*> element : m_metadata) {
+            unexportGpio(element->first);
+        }
+    }
+
 	GpioInterrupt& operator=(GpioInterrupt const&) {};
 	GpioInterrupt(GpioInterrupt&);
 
