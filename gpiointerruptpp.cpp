@@ -35,13 +35,14 @@ bool GpioInterrupt::addPin(int pin, int pindirection, int irqtype, int pinstate,
 {
     MetaData *md = new MetaData();
     
+    memset(md, 0, sizeof(MetaData));
     md->m_pin = pin;
     md->m_type = irqtype;
     md->m_direction = pindirection;
     md->m_state = pinstate;
     md->m_debounce = debounce;
     
-    syslog(LOG_INFO, "Setting pin %d: interrupt %d, direction %d, state %d, debounce %d", pin, irqtype, pindirection, pinstate, debounce);
+    syslog(LOG_INFO, "Setting pin %d: interrupt %d, direction %d, state %d, debounce %d", pin, pindirection, irqtype, pinstate, debounce);
     if (!exportGpio(pin)) {
         syslog(LOG_ERR, "Unable to export pin %d", pin);
         free(md);
@@ -49,15 +50,15 @@ bool GpioInterrupt::addPin(int pin, int pindirection, int irqtype, int pinstate,
     }
     
     md->m_enabled = true;
-    if (!setPinInterruptType(pin, irqtype)) {
-        syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
+    if (!setPinDirection(pin, pindirection)) {
+        syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
         unexportGpio(pin);
         free(md);
         return false;
     }
     
-    if (!setPinDirection(pin, pindirection)) {
-        syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
+    if (!setPinInterruptType(pin, irqtype)) {
+        syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
         unexportGpio(pin);
         free(md);
         return false;
@@ -160,7 +161,6 @@ bool GpioInterrupt::setPinDirection(int pin, int dir)
         if (dir == GPIO_DIRECTION_OUT)
             write(fd, "out", 3);
         
-        syslog(LOG_INFO, "Set pin %d to direction %d", pin, dir);
         return true;
     }
     
@@ -179,9 +179,9 @@ bool GpioInterrupt::setPinState(int pin, int state)
     }
     else {
         if (state == GPIO_PIN_ACTIVE_LOW)
-            write(fd, "0", 1);
-        if (state == GPIO_PIN_ACTIVE_HIGH)
             write(fd, "1", 1);
+        else if (state == GPIO_PIN_ACTIVE_HIGH)
+            write(fd, "0", 1);
         
         return true;
     }
@@ -314,7 +314,6 @@ void GpioInterrupt::run()
         return;
     }
     
-    syslog(LOG_INFO, "%s:%d: Adding %d entries to the poll function", __FUNCTION__, __LINE__, m_metadata.size());
     for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
         if (it->second->m_direction == GPIO_DIRECTION_OUT || it->second->m_type == GPIO_IRQ_NONE)
             continue;
@@ -332,6 +331,7 @@ void GpioInterrupt::run()
         }
     }
 
+    syslog(LOG_INFO, "%s:%d: watching %d pins for interrupts", __FUNCTION__, __LINE__, m_activeDescriptors.size());
     while (m_enabled) {
         nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, 100);
         if (nfds == 0) {
