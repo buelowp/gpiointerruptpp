@@ -102,7 +102,7 @@ bool GpioInterrupt::value(int pin, int &value)
 
     if (md) {
         if (md->m_direction == GPIO_DIRECTION_OUT)
-            syslog(LOG_ERR, "Trying to read the value of an output GPIO on pin %d, this may be weird", md->m_pin);
+            syslog(LOG_NOTICE, "Trying to read the value of an output GPIO on pin %d, this may be weird", md->m_pin);
         
         memset(buf, '\0', 4);
         if (md->m_isOpen) {
@@ -115,7 +115,7 @@ bool GpioInterrupt::value(int pin, int &value)
             }
             catch (const std::exception& e) {
                 syslog(LOG_ERR, "exception converting gpio read: %s", e.what());
-                syslog(LOG_NOTICE, "%s:%d: read .%s.", __FUNCTION__, __LINE__, buf);
+                syslog(LOG_DEBUG, "%s:%d: read .%s.", __FUNCTION__, __LINE__, buf);
                 return false;
             }
             lseek(md->m_fd, 0, SEEK_SET);
@@ -221,10 +221,10 @@ bool GpioInterrupt::exportGpio(int pin)
     memset(buf, '\0', 128);
     if ((fd = open("/sys/class/gpio/export", O_WRONLY)) > 0) {
         sprintf(buf, "%d", pin);
-        syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
+        syslog(LOG_DEBUG, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
         if (write(fd, buf, strlen(buf) + 1) < 0) {
                 if (errno == 16) {
-                    syslog(LOG_NOTICE, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
+                    syslog(LOG_DEBUG, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
                 }
                 else {
                     syslog(LOG_ERR, "write (%s): %s(%d)", buf, strerror(errno), errno);
@@ -248,7 +248,7 @@ bool GpioInterrupt::unexportGpio(int pin)
     setPinInterruptType(pin, GPIO_IRQ_NONE);
     if ((fd = open("/sys/class/gpio/unexport", O_WRONLY)) > 0) {
 		sprintf(buf, "%d", pin);
-		syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/unexport", __FUNCTION__, __LINE__, buf);
+		syslog(LOG_DEBUG, "%s:%d: Writing %s to /sys/class/gpio/unexport", __FUNCTION__, __LINE__, buf);
 		if (write(fd, buf, strlen(buf) + 1) < 0) {
 			syslog(LOG_ERR, "write (/sys/class/gpio/unexport): %s(%d)", strerror(errno), errno);
 			close(fd);
@@ -292,7 +292,7 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
 			return false;
 		}
 
-        syslog(LOG_NOTICE, "%s:%d: Set edge to %s", __FUNCTION__, __LINE__, buf);
+        syslog(LOG_DEBUG, "%s:%d: Set edge to %s", __FUNCTION__, __LINE__, buf);
         close(fd);
     }
     else {
@@ -383,7 +383,7 @@ bool GpioInterrupt::checkDebounce(MetaData *pin)
     if (timeDiff < pin->m_debounce)
         return false;
 
-    syslog(LOG_INFO, "%s:%d: Setting interrupt time to %ld", __FUNCTION__, __LINE__, nowMs);
+    syslog(LOG_DEBUG, "%s:%d: Setting interrupt time to %ld", __FUNCTION__, __LINE__, nowMs);
     pin->m_time = nowMs;
     return true;
 }
@@ -446,13 +446,11 @@ void GpioInterrupt::start()
 void GpioInterrupt::stop()
 {
     m_enabled = false;
-    syslog(LOG_INFO, "%s:%d: Disabling IRQ Handler", __FUNCTION__, __LINE__);
+    syslog(LOG_NOTICE, "%s:%d: Disabling IRQ Handler", __FUNCTION__, __LINE__);
 }
 
 bool GpioInterrupt::openPin(MetaData *pin)
 {
-    MetaData *md = nullptr;
-    
     if (!pin->m_enabled) {
         syslog(LOG_ERR, "GPIO has not been sucessfully exported");
         return false;
@@ -467,7 +465,7 @@ bool GpioInterrupt::openPin(MetaData *pin)
         }
         else {
             pin->m_isOpen = true;
-            syslog(LOG_NOTICE, "%s:%d: Opened %s with fd %d", __FUNCTION__, __LINE__, path.c_str(), pin->m_fd);
+            syslog(LOG_DEBUG, "%s:%d: Opened %s with fd %d", __FUNCTION__, __LINE__, path.c_str(), pin->m_fd);
         }
     }
     return pin->m_isOpen;
