@@ -30,6 +30,8 @@
 #include <sstream>
 #include <string>
 #include <fstream>
+#include <cstdio>
+#include <cstdlib>
 
 #include <errno.h>
 #include <sys/types.h>
@@ -73,7 +75,7 @@ public:
         std::function<void(struct METADATA*)> m_callback;
     } MetaData;
 
-    bool addPin(int pin, int irqtype = GPIO_IRQ_RISING, int pindirection = GPIO_DIRECTION_IN, int pinstate = GPIO_PIN_ACTIVE_HIGH, unsigned long debounce = 100);
+    bool addPin(int pin, int pindirection = GPIO_DIRECTION_IN, int irqtype = GPIO_IRQ_RISING, int pinstate = GPIO_PIN_ACTIVE_HIGH, unsigned long debounce = 100);
     int removePin(int pin);
     bool setPinCallback(int pin, std::function<void(MetaData*)> cbk);
     bool setPinInterruptType(int pin, int type = GPIO_IRQ_RISING);

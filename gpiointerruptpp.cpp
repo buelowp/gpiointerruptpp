@@ -31,16 +31,18 @@
  * need the irqtype, state, and debounce, though pindirection is pretty important if you want to read an out pin
  * on accident.
  */
-bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate, unsigned long debounce)
+bool GpioInterrupt::addPin(int pin, int pindirection, int irqtype, int pinstate, unsigned long debounce)
 {
     MetaData *md = new MetaData();
     
+    memset(md, 0, sizeof(MetaData));
     md->m_pin = pin;
     md->m_type = irqtype;
     md->m_direction = pindirection;
     md->m_state = pinstate;
     md->m_debounce = debounce;
     
+    syslog(LOG_INFO, "Setting pin %d: interrupt %d, direction %d, state %d, debounce %d", pin, pindirection, irqtype, pinstate, debounce);
     if (!exportGpio(pin)) {
         syslog(LOG_ERR, "Unable to export pin %d", pin);
         free(md);
@@ -48,15 +50,15 @@ bool GpioInterrupt::addPin(int pin, int irqtype, int pindirection, int pinstate,
     }
     
     md->m_enabled = true;
-    if (!setPinInterruptType(pin, irqtype)) {
-        syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
+    if (!setPinDirection(pin, pindirection)) {
+        syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
         unexportGpio(pin);
         free(md);
         return false;
     }
     
-    if (!setPinDirection(pin, pindirection)) {
-        syslog(LOG_ERR, "Unable to set pin direction for pin %d", pin);
+    if (!setPinInterruptType(pin, irqtype)) {
+        syslog(LOG_ERR, "Unable to set interrupt type for pin %d", pin);
         unexportGpio(pin);
         free(md);
         return false;
@@ -102,7 +104,7 @@ bool GpioInterrupt::value(int pin, int &value)
 
     if (md) {
         if (md->m_direction == GPIO_DIRECTION_OUT)
-            syslog(LOG_ERR, "Trying to read the value of an output GPIO on pin %d, this may be weird", md->m_pin);
+            syslog(LOG_NOTICE, "Trying to read the value of an output GPIO on pin %d, this may be weird", md->m_pin);
         
         memset(buf, '\0', 4);
         if (md->m_isOpen) {
@@ -115,7 +117,7 @@ bool GpioInterrupt::value(int pin, int &value)
             }
             catch (const std::exception& e) {
                 syslog(LOG_ERR, "exception converting gpio read: %s", e.what());
-                syslog(LOG_NOTICE, "%s:%d: read .%s.", __FUNCTION__, __LINE__, buf);
+                syslog(LOG_DEBUG, "%s:%d: read .%s.", __FUNCTION__, __LINE__, buf);
                 return false;
             }
             lseek(md->m_fd, 0, SEEK_SET);
@@ -164,6 +166,7 @@ bool GpioInterrupt::setPinDirection(int pin, int dir)
         return true;
     }
     
+    syslog(LOG_ERR, "Unable to set pin %d direction to %d", pin, dir);
     return false;
 }
 
@@ -178,9 +181,9 @@ bool GpioInterrupt::setPinState(int pin, int state)
     }
     else {
         if (state == GPIO_PIN_ACTIVE_LOW)
-            write(fd, "0", 1);
-        if (state == GPIO_PIN_ACTIVE_HIGH)
             write(fd, "1", 1);
+        else if (state == GPIO_PIN_ACTIVE_HIGH)
+            write(fd, "0", 1);
         
         return true;
     }
@@ -196,7 +199,7 @@ void GpioInterrupt::setValue(int pin, int value)
         md = m_metadata.at(pin);
     }
     catch (std::out_of_range &e) {
-        syslog(LOG_ERR, "Exception (%s) trying to insert callback for pin %d", e.what(), pin);
+        syslog(LOG_ERR, "Exception (%s) cannot find metadata for pin %d", e.what(), pin);
     }
     
     if (md) {
@@ -207,7 +210,7 @@ void GpioInterrupt::setValue(int pin, int value)
                 write(md->m_fd, "0", 1);
         }
         else {
-            syslog(LOG_ERR, "Either pin %d is not open, or it's set to be an input, just fyi", md->m_pin);
+            syslog(LOG_ERR, "ERROR: Pin %d state is %d, direction is %d", md->m_pin, md->m_isOpen, md->m_direction);
         }
     }
 }
@@ -220,10 +223,10 @@ bool GpioInterrupt::exportGpio(int pin)
     memset(buf, '\0', 128);
     if ((fd = open("/sys/class/gpio/export", O_WRONLY)) > 0) {
         sprintf(buf, "%d", pin);
-        syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
+        syslog(LOG_DEBUG, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
         if (write(fd, buf, strlen(buf) + 1) < 0) {
                 if (errno == 16) {
-                    syslog(LOG_NOTICE, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
+                    syslog(LOG_DEBUG, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
                 }
                 else {
                     syslog(LOG_ERR, "write (%s): %s(%d)", buf, strerror(errno), errno);
@@ -247,7 +250,7 @@ bool GpioInterrupt::unexportGpio(int pin)
     setPinInterruptType(pin, GPIO_IRQ_NONE);
     if ((fd = open("/sys/class/gpio/unexport", O_WRONLY)) > 0) {
 		sprintf(buf, "%d", pin);
-		syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/unexport", __FUNCTION__, __LINE__, buf);
+		syslog(LOG_DEBUG, "%s:%d: Writing %s to /sys/class/gpio/unexport", __FUNCTION__, __LINE__, buf);
 		if (write(fd, buf, strlen(buf) + 1) < 0) {
 			syslog(LOG_ERR, "write (/sys/class/gpio/unexport): %s(%d)", strerror(errno), errno);
 			close(fd);
@@ -291,7 +294,7 @@ bool GpioInterrupt::setPinInterruptType(int pin, int type)
 			return false;
 		}
 
-        syslog(LOG_NOTICE, "%s:%d: Set edge to %s", __FUNCTION__, __LINE__, buf);
+        syslog(LOG_DEBUG, "%s:%d: Set edge to %s", __FUNCTION__, __LINE__, buf);
         close(fd);
     }
     else {
@@ -313,8 +316,10 @@ void GpioInterrupt::run()
         return;
     }
     
-    syslog(LOG_DEBUG, "%s:%d: Adding %d entries to the poll function", __FUNCTION__, __LINE__, m_metadata.size());
     for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
+        if (it->second->m_direction == GPIO_DIRECTION_OUT || it->second->m_type == GPIO_IRQ_NONE)
+            continue;
+        
         ev.data.fd = it->second->m_fd;
         ev.events = EPOLLET;
         it->second->m_direction = GPIO_IRQ_NONE;
@@ -329,11 +334,12 @@ void GpioInterrupt::run()
         }
         else {
             m_activeDescriptors.insert(std::pair<int, int>(it->second->m_pin, it->second->m_fd));
-            syslog(LOG_DEBUG, "%s:%d: Added pollfd entry %d, fd %d", __FUNCTION__, __LINE__, index, it->second->m_fd);
+            syslog(LOG_INFO, "%s:%d: Added pollfd entry %d, fd %d", __FUNCTION__, __LINE__, index, it->second->m_fd);
             index++;
         }
     }
 
+    syslog(LOG_INFO, "%s:%d: watching %d pins for interrupts", __FUNCTION__, __LINE__, m_activeDescriptors.size());
     while (m_enabled) {
         nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, 100);
         if (nfds == 0) {
@@ -359,7 +365,7 @@ void GpioInterrupt::run()
                     std::function<void(MetaData*)> func = mdit->second->m_callback;
                     try {
                         if (checkDebounce(&(*mdit->second))) {
-                            syslog(LOG_DEBUG, "%s:%d: Executing callback for pin %d", __FUNCTION__, __LINE__, mdit->second->m_pin);
+                            syslog(LOG_INFO, "%s:%d: Executing callback for pin %d", __FUNCTION__, __LINE__, mdit->second->m_pin);
                             func(&(*mdit->second));
                         }
                     }
@@ -397,7 +403,7 @@ GpioInterrupt::MetaData* GpioInterrupt::getPinMetaData(int pin)
 		return &(*it->second);
 	}
 
-	syslog(LOG_DEBUG, "%s:%d: Pin %d cannot be found", __FUNCTION__, __LINE__, pin);
+	syslog(LOG_INFO, "%s:%d: Pin %d cannot be found", __FUNCTION__, __LINE__, pin);
 	return nullptr;
 }
 
@@ -421,11 +427,6 @@ bool GpioInterrupt::set(MetaData *pin)
 {
 	std::lock_guard<std::mutex> guard(m_mutex);
 
-	if (pin->m_direction != GPIO_DIRECTION_IN) {
-		syslog(LOG_DEBUG, "%s:%d: Pin is set as output, cannot continue", __FUNCTION__, __LINE__);
-		return false;
-	}
-
 	if (m_metadata.find(pin->m_pin) != m_metadata.end()) {
 		syslog(LOG_ERR, "Pin %d is already active, cancel first", pin->m_pin);
 		return false;
@@ -446,20 +447,18 @@ void GpioInterrupt::start()
         m_thread = new std::thread(&GpioInterrupt::run, this);
         m_thread->detach();
         m_enabled = true;
-        syslog(LOG_DEBUG, "%s:%d: Enabling IRQ Handler", __FUNCTION__, __LINE__);
+        syslog(LOG_INFO, "%s:%d: Enabling IRQ Handler", __FUNCTION__, __LINE__);
     }
 }
 
 void GpioInterrupt::stop()
 {
     m_enabled = false;
-    syslog(LOG_DEBUG, "%s:%d: Disabling IRQ Handler", __FUNCTION__, __LINE__);
+    syslog(LOG_NOTICE, "%s:%d: Disabling IRQ Handler", __FUNCTION__, __LINE__);
 }
 
 bool GpioInterrupt::openPin(MetaData *pin)
 {
-    MetaData *md = nullptr;
-    
     if (!pin->m_enabled) {
         syslog(LOG_ERR, "GPIO has not been sucessfully exported");
         return false;
@@ -474,7 +473,7 @@ bool GpioInterrupt::openPin(MetaData *pin)
         }
         else {
             pin->m_isOpen = true;
-            syslog(LOG_NOTICE, "%s:%d: Opened %s with fd %d", __FUNCTION__, __LINE__, path.c_str(), pin->m_fd);
+            syslog(LOG_DEBUG, "%s:%d: Opened %s with fd %d", __FUNCTION__, __LINE__, path.c_str(), pin->m_fd);
         }
     }
     return pin->m_isOpen;
