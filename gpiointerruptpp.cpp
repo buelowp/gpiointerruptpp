@@ -81,9 +81,11 @@ bool GpioInterrupt::setPinDebounce(int pin, int debounce)
     }
     catch (std::out_of_range &e) {
         syslog(LOG_ERR, "Exception (%s) trying to insert callback for pin %d", e.what(), pin);
+        return false;
     }
 
     md->m_debounce = debounce;
+    return true;
 }
 
 bool GpioInterrupt::value(int pin, int &value)
@@ -217,18 +219,18 @@ bool GpioInterrupt::exportGpio(int pin)
     
     memset(buf, '\0', 128);
     if ((fd = open("/sys/class/gpio/export", O_WRONLY)) > 0) {
-	sprintf(buf, "%d", pin);
-	syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
-	if (write(fd, buf, strlen(buf) + 1) < 0) {
-            if (errno == 16) {
-                syslog(LOG_NOTICE, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
-            }
-            else {
-                syslog(LOG_ERR, "write (%s): %s(%d)", buf, strerror(errno), errno);
-                close(fd);
-                return false;
-            }
-	}
+        sprintf(buf, "%d", pin);
+        syslog(LOG_NOTICE, "%s:%d: Writing %s to /sys/class/gpio/export", __FUNCTION__, __LINE__, buf);
+        if (write(fd, buf, strlen(buf) + 1) < 0) {
+                if (errno == 16) {
+                    syslog(LOG_NOTICE, "%s:%d: Pin %d has been exported, assuming control", __FUNCTION__, __LINE__, pin);
+                }
+                else {
+                    syslog(LOG_ERR, "write (%s): %s(%d)", buf, strerror(errno), errno);
+                    close(fd);
+                    return false;
+                }
+        }
     }
     else {
         syslog(LOG_ERR, "open: /sys/class/gpio/export: %s(%d)", strerror(errno), errno);
@@ -315,6 +317,12 @@ void GpioInterrupt::run()
     for (std::map<int,MetaData*>::iterator it = m_metadata.begin(); it != m_metadata.end(); ++it) {
         ev.data.fd = it->second->m_fd;
         ev.events = EPOLLET;
+        it->second->m_direction = GPIO_IRQ_NONE;
+        int state;
+        if (value(it->second->m_pin, state))
+            it->second->m_state = state;
+        else
+            syslog(LOG_ERR, "gpio state is now invalid");
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, it->second->m_fd, &ev) == -1) {
             syslog(LOG_ERR, "epoll_ctl: %s(%d)", strerror(errno), errno);
             continue;
