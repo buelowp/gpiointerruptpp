@@ -42,7 +42,7 @@ bool GpioInterrupt::addPin(int pin, int pindirection, int irqtype, int pinstate,
     md->m_state = pinstate;
     md->m_debounce = debounce;
     
-    syslog(LOG_INFO, "Setting pin %d: interrupt %d, direction %d, state %d, debounce %d", pin, pindirection, irqtype, pinstate, debounce);
+    syslog(LOG_INFO, "Setting pin %d: interrupt %d, direction %d, state %d, debounce %ld", pin, pindirection, irqtype, pinstate, debounce);
     if (!exportGpio(pin)) {
         syslog(LOG_ERR, "Unable to export pin %d", pin);
         free(md);
@@ -339,7 +339,7 @@ void GpioInterrupt::run()
         }
     }
 
-    syslog(LOG_INFO, "%s:%d: watching %d pins for interrupts", __FUNCTION__, __LINE__, m_activeDescriptors.size());
+    syslog(LOG_INFO, "%s:%d: watching %d pins for interrupts", __FUNCTION__, __LINE__, static_cast<int>(m_activeDescriptors.size()));
     while (m_enabled) {
         nfds = epoll_wait(epollfd, events, GPIO_MAX_POLL, 100);
         if (nfds == 0) {
